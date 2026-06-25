@@ -1,2 +1,0 @@
-# spc-economy-calculator
-a

@@ -598,11 +598,14 @@
     // --- 2. STATE ---
     let appState = { groups: [], globalModifiers: [], planets: [] };
 
-    // Tech tree state (loaded from combined save)
-    let techResearched = {};
+    // Tech tree state — read live from localStorage (written by techtree.html on every toggle)
+    function getResearched() {
+        try { return JSON.parse(localStorage.getItem('spc_techtree') || '{}'); } catch(e) { return {}; }
+    }
 
     function updateTechIndicator() {
-        const count = Object.values(techResearched).filter(Boolean).length;
+        const researched = getResearched();
+        const count = Object.values(researched).filter(Boolean).length;
         const ind = document.getElementById('tech-indicator');
         const cnt = document.getElementById('tech-count');
         if (count > 0) { ind.style.display = ''; cnt.textContent = count; }
@@ -621,6 +624,7 @@
             influence:'Influence', abstract:'Tech', basic:null, trade:'Trade'
         };
 
+        const techResearched = getResearched();
         Object.entries(techResearched).forEach(([id, isRes]) => {
             if (!isRes) return;
             // Find node in TECH_NODES (built at init)
@@ -691,7 +695,13 @@
     }
 
     function saveData() {
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appState, null, 2));
+        // Combine economy state + tech tree state into one save file
+        const combined = Object.assign({}, appState);
+        try {
+            const tt = localStorage.getItem('spc_techtree');
+            if (tt) combined.techtree = JSON.parse(tt);
+        } catch(ex) {}
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(combined, null, 2));
         const anchor = document.createElement('a');
         anchor.href = dataStr; anchor.download = "empire_save.json";
         document.body.appendChild(anchor); anchor.click(); anchor.remove();
@@ -715,9 +725,9 @@
                     });
                 }
                 appState = loadedState;
-                // Load tech tree state if present
+                // Load tech tree state if present — push to localStorage for live sync
                 if (loadedState.techtree) {
-                    techResearched = loadedState.techtree;
+                    try { localStorage.setItem('spc_techtree', JSON.stringify(loadedState.techtree)); } catch(ex) {}
                     updateTechIndicator();
                 }
                 renderApp();
@@ -1049,14 +1059,14 @@
         outputDiv.innerHTML = gridHtml;
     }
 
-    // Build tech node lookup from embedded data (populated by techtree page via save)
-    // We don't embed the full 100KB here — just parse what we need from the save
-    const TECH_NODES = {};
-    // TECH_NODES is populated when a save with techtree key is loaded
+    // Embedded tech effects lookup (economy-affecting techs only, ~10KB)
+    const TECH_NODES = {"administrative_ai":{"name":"Administrative AI","effects":[{"kind":"flat_turn","res":"tech","val":15.0}]},"quantum_theory":{"name":"Quantum Theory","effects":[{"kind":"flat_turn","res":"tech","val":15.0}]},"applied_quantum_physics":{"name":"Applied Quantum Physics","effects":[{"kind":"flat_turn","res":"tech","val":50.0}]},"exotic_materials_labs":{"name":"Exotic Materials Labs","effects":[{"kind":"flat_typed_planet","res":"tech","val":20.0,"planet_type":"tech"},{"kind":"flat_upkeep_planet","res":"trade","val":2.0}]},"space_time_theory":{"name":"Space-Time Theory","effects":[{"kind":"flat_turn","res":"tech","val":100.0}]},"multi_dimensional_studies":{"name":"Multi-Dimensional Studies","effects":[{"kind":"flat_typed_planet","res":"tech","val":50.0,"planet_type":"tech"},{"kind":"flat_upkeep_planet","res":"trade","val":3.0}]},"gravitational_analysis_i":{"name":"Gravitational Analysis I","effects":[{"kind":"flat_planet","res":"money","val":20.0}]},"interplanetary_research_initiative":{"name":"Interplanetary Research Initiative","effects":[{"kind":"flat_typed_planet","res":"tech","val":200.0,"planet_type":"tech"},{"kind":"flat_upkeep_planet","res":"trade","val":10.0}]},"field_modulation":{"name":"Field Modulation","effects":[{"kind":"flat_turn","res":"money","val":25.0}]},"quantum_energy_states":{"name":"Quantum Energy States","effects":[{"kind":"flat_turn","res":"money","val":25.0}]},"quantum_field_manipulation":{"name":"Quantum Field Manipulation","effects":[{"kind":"flat_turn","res":"money","val":25.0}]},"applied_superconductivity_i":{"name":"Applied Superconductivity I","effects":[{"kind":"flat_typed_planet","res":"money","val":50.0,"planet_type":"generator"}]},"eco_simulation":{"name":"Eco Simulation","effects":[{"kind":"flat_turn","res":"food","val":10.0}]},"gene_crops":{"name":"Gene Crops","effects":[{"kind":"flat_turn","res":"food","val":10.0}]},"food_processing":{"name":"Food Processing","effects":[{"kind":"flat_typed_planet","res":"food","val":10.0,"planet_type":"agri"}]},"nano_vitality_crops":{"name":"Nano-Vitality Crops","effects":[{"kind":"flat_turn","res":"food","val":50.0}]},"advanced_food_processing":{"name":"Advanced Food Processing","effects":[{"kind":"flat_typed_planet","res":"food","val":10.0,"planet_type":"agri"}]},"nutrient_replication":{"name":"Nutrient Replication","effects":[{"kind":"flat_typed_planet","res":"food","val":20.0,"planet_type":"agri"}]},"transgenic_crops_i":{"name":"Transgenic Crops I","effects":[{"kind":"flat_typed_planet","res":"food","val":20.0,"planet_type":"agri"}]},"gene_modification":{"name":"Gene Modification","effects":[{"kind":"pct_turn","res":"basic","val":5.0}]},"genome_mapping":{"name":"Genome Mapping","effects":[{"kind":"pct_turn","res":"basic","val":5.0}]},"gene_tailoring":{"name":"Gene Tailoring","effects":[{"kind":"pct_turn","res":"basic","val":5.0}]},"cloning":{"name":"Cloning","effects":[{"kind":"pct_turn","res":"basic","val":5.0}]},"tracking_implants":{"name":"Tracking Implants","effects":[{"kind":"flat_planet","res":"basic","val":10.0}]},"glandural_accilmation":{"name":"Glandural Accilmation","effects":[{"kind":"pct_turn","res":"basic","val":5.0}]},"gene_revitalization":{"name":"Gene Revitalization","effects":[{"kind":"pct_turn","res":"basic","val":5.0}]},"gene_banks":{"name":"Gene Banks","effects":[{"kind":"pct_turn","res":"basic","val":5.0}]},"targeted_gene_expressions":{"name":"Targeted Gene Expressions","effects":[{"kind":"pct_turn","res":"basic","val":5.0}]},"biodiversity_studies":{"name":"Biodiversity Studies","effects":[{"kind":"flat_turn","res":"tech","val":10.0}]},"xenobiology":{"name":"Xenobiology","effects":[{"kind":"flat_turn","res":"tech","val":20.0}]},"secrets_of_life":{"name":"Secrets of Life","effects":[{"kind":"flat_turn","res":"tech","val":50.0}]},"atmospheric_filtering":{"name":"Atmospheric Filtering","effects":[{"kind":"habitability","val":5.0}]},"hostile_environment_adaptation":{"name":"Hostile Environment Adaptation","effects":[{"kind":"habitability","val":5.0}]},"foreign_soil_enrichment":{"name":"Foreign Soil Enrichment","effects":[{"kind":"habitability","val":5.0}]},"eco_integration_studies":{"name":"Eco-Integration Studies","effects":[{"kind":"habitability","val":5.0}]},"terrestrial_sculpting":{"name":"Terrestrial Sculpting","effects":[{"kind":"planet_cap","val":1},{"kind":"habitability","val":5.0}]},"ecological_adaptation":{"name":"Ecological Adaptation","effects":[{"kind":"planet_cap","val":1},{"kind":"habitability","val":5.0}]},"climate_restoration":{"name":"Climate Restoration","effects":[{"kind":"habitability","val":5.0}]},"stellar_expansion":{"name":"Stellar Expansion","effects":[{"kind":"flat_turn","res":"influence","val":1.0}]},"interstellar_campaigns":{"name":"Interstellar Campaigns","effects":[{"kind":"flat_turn","res":"influence","val":1.0}]},"galactic_campaigns":{"name":"Galactic Campaigns","effects":[{"kind":"flat_turn","res":"influence","val":3.0}]},"psionic_theory":{"name":"Psionic Theory","effects":[{"kind":"flat_planet","res":"basic","val":10.0}]},"thought_enforcement":{"name":"Thought Enforcement","effects":[{"kind":"flat_turn","res":"abstract","val":20.0}]},"adaptive_bureaucracy":{"name":"Adaptive Bureaucracy","effects":[{"kind":"flat_turn","res":"unity","val":20.0}]},"improved_production":{"name":"Improved Production","effects":[{"kind":"flat_planet","res":"basic","val":5.0}]},"centralized_colonial_government":{"name":"Centralized Colonial Government","effects":[{"kind":"flat_turn","res":"influence","val":1.0}]},"global_production_strategy":{"name":"Global Production Strategy","effects":[{"kind":"pct_turn","res":"alloy","val":15.0}]},"automated_curation_algorithms":{"name":"Automated Curation Algorithms","effects":[{"kind":"flat_typed_planet","res":"unity","val":20.0,"planet_type":"unification"}]},"galactic_markets":{"name":"Galactic Markets","effects":[{"kind":"flat_turn","res":"money","val":50.0}]},"colonial_bureaucracy":{"name":"Colonial Bureaucracy","effects":[{"kind":"flat_turn","res":"unity","val":20.0}]},"effective_bureaucracy":{"name":"Effective Bureaucracy","effects":[{"kind":"flat_turn","res":"unity","val":20.0}]},"efficiencies_of_scale":{"name":"Efficiencies of Scale","effects":[{"kind":"flat_planet","res":"basic","val":10.0}]},"galactic_bureaucracy":{"name":"Galactic Bureaucracy","effects":[{"kind":"flat_turn","res":"unity","val":20.0}]},"maximized_productivity":{"name":"Maximized Productivity","effects":[{"kind":"flat_planet","res":"basic","val":20.0}]},"administrative_efficiency_i":{"name":"Administrative Efficiency I","effects":[{"kind":"flat_turn","res":"unity","val":20.0}]},"ceramo_steel_infrastructure":{"name":"Ceramo-Steel Infrastructure","effects":[{"kind":"planet_cap","val":1},{"kind":"pct_turn","res":"basic","val":5.0}]},"dual_steel_infrastructure":{"name":"Dual-Steel Infrastructure","effects":[{"kind":"planet_cap","val":1},{"kind":"pct_turn","res":"basic","val":5.0}]},"unity_of_purpose":{"name":"Unity of Purpose","effects":[{"kind":"flat_typed_planet","res":"unity","val":10.0,"planet_type":"unification"}]},"resource_processing_algorithms":{"name":"Resource Processing Algorithms","effects":[{"kind":"flat_planet","res":"basic","val":5.0}]},"collective_production_methods":{"name":"Collective Production Methods","effects":[{"kind":"flat_planet","res":"basic","val":5.0}]},"autonomous_agents":{"name":"Autonomous Agents","effects":[{"kind":"flat_turn","res":"influence","val":1.0}]},"embodied_dynamism":{"name":"Embodied Dynamism","effects":[{"kind":"flat_turn","res":"unity","val":20.0}]},"geothermal_tracking":{"name":"Geothermal Tracking","effects":[{"kind":"flat_turn","res":"mineral","val":10.0}]},"deep_core_mining":{"name":"Deep Core Mining","effects":[{"kind":"flat_turn","res":"mineral","val":10.0}]},"mineral_isolation":{"name":"Mineral Isolation","effects":[{"kind":"flat_turn","res":"mineral","val":30.0}]},"mineral_purification":{"name":"Mineral Purification","effects":[{"kind":"flat_typed_planet","res":"mineral","val":10.0,"planet_type":"mining"}]},"adv__mineral_purification":{"name":"Adv. Mineral Purification","effects":[{"kind":"flat_typed_planet","res":"mineral","val":10.0,"planet_type":"mining"}]},"extraction_patterns":{"name":"Extraction Patterns","effects":[{"kind":"flat_typed_planet","res":"mineral","val":20.0,"planet_type":"mining"}]},"holographic_casts":{"name":"Holographic Casts","effects":[{"kind":"flat_typed_planet","res":"alloy","val":10.0,"planet_type":"forge"}]},"nano_separators":{"name":"Nano-Separators","effects":[{"kind":"flat_typed_planet","res":"alloy","val":10.0,"planet_type":"forge"}]},"zero_g_refineries":{"name":"Zero-G Refineries","effects":[{"kind":"flat_turn","res":"mineral","val":10.0}]},"long_range_mineral_scanners":{"name":"Long-Range Mineral Scanners","effects":[{"kind":"flat_turn","res":"mineral","val":10.0}]},"mineral_cutting_beams":{"name":"Mineral Cutting Beams","effects":[{"kind":"flat_turn","res":"mineral","val":10.0}]},"automotous_mining_drones":{"name":"Automotous Mining Drones","effects":[{"kind":"flat_turn","res":"mineral","val":10.0}]},"nanite_mineral_probes":{"name":"Nanite Mineral Probes","effects":[{"kind":"flat_turn","res":"mineral","val":20.0}]},"nanomechanics":{"name":"Nanomechanics","effects":[{"kind":"flat_turn","res":"tech","val":10.0}]},"supersolid_materials":{"name":"Supersolid Materials","effects":[{"kind":"flat_turn","res":"tech","val":20.0}]},"superfluid_materials":{"name":"Superfluid Materials","effects":[{"kind":"flat_turn","res":"tech","val":50.0}]},"robotic_workers":{"name":"Robotic Workers","effects":[{"kind":"flat_planet","res":"basic","val":5.0}]},"machine_template_system__for_robots":{"name":"Machine Template System (for robots)","effects":[{"kind":"pct_turn","res":"basic","val":5.0}]},"binary_motivators__robots":{"name":"Binary Motivators (robots)","effects":[{"kind":"pct_turn","res":"basic","val":5.0}]},"nanite_assmeblers":{"name":"Nanite Assmeblers","effects":[{"kind":"pct_turn","res":"basic","val":5.0}]},"mega_assembly_systems":{"name":"Mega assembly systems","effects":[{"kind":"pct_turn","res":"basic","val":5.0}]},"ceramo_metal_alloys":{"name":"Ceramo Metal Alloys","effects":[{"kind":"flat_typed_planet","res":"alloy","val":15.0,"planet_type":"forge"}]},"durasteel_laced_alloys":{"name":"Durasteel Laced Alloys","effects":[{"kind":"flat_typed_planet","res":"alloy","val":15.0,"planet_type":"forge"}]},"autochthon_monument":{"name":"Autochthon Monument","effects":[{"kind":"pct_turn","res":"unity","val":10.0}]},"omega_alignment":{"name":"Omega Alignment","effects":[{"kind":"pct_turn","res":"tech","val":10.0}]}};
 
     initDatalist();
     renderApp();
     updateTechIndicator();
+    // Refresh tech indicator when window regains focus (user may have toggled techs in the other tab)
+    window.addEventListener('focus', updateTechIndicator);
 </script>
 </body>
 </html>

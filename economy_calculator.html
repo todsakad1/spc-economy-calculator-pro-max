@@ -1014,19 +1014,41 @@
 
         // BUG FIX #3: turn-scope % mods that target resources with zero base now silently work
         // by initialising the key to 0 before multiplying, so at least they don't error or disappear
+        // Apply turn mods in two passes: flats first, then percentages.
+        // This ensures tech-tree-injected flat mods (appended after globals) get
+        // the same % treatment as manually-entered flat mods, matching the formula:
+        // ( [planet gross] + [all turn flats] ) × [all turn pcts]
+        const turnFlatProd = {};   // res -> total flat addition
+        const turnPctProd  = {};   // res -> cumulative multiplier (additive stacking: 1 + sum%)
+        const turnFlatUpk  = {};
+        const turnPctUpk   = {};
+
         turnMods.forEach(m => {
             parseModifier(m.type, m.value).forEach(mod => {
                 if (mod.isUpkeep) {
-                    if (mod.isPct) upkeep[mod.res] = (upkeep[mod.res] || 0) * (1 + (mod.value / 100));
-                    else upkeep[mod.res] = (upkeep[mod.res] || 0) + mod.value;
+                    if (mod.isPct) turnPctUpk[mod.res] = (turnPctUpk[mod.res] || 0) + mod.value;
+                    else           turnFlatUpk[mod.res] = (turnFlatUpk[mod.res] || 0) + mod.value;
                 } else {
-                    if (mod.isPct) {
-                        // If no production exists yet, % mult on 0 still gives 0 — but at least it won't silently discard
-                        gross[mod.res] = (gross[mod.res] || 0) * (1 + (mod.value / 100));
-                    }
-                    else gross[mod.res] = (gross[mod.res] || 0) + mod.value;
+                    if (mod.isPct) turnPctProd[mod.res] = (turnPctProd[mod.res] || 0) + mod.value;
+                    else           turnFlatProd[mod.res] = (turnFlatProd[mod.res] || 0) + mod.value;
                 }
             });
+        });
+
+        // Pass 1: apply all flat adds
+        Object.entries(turnFlatProd).forEach(([res, val]) => {
+            gross[res] = (gross[res] || 0) + val;
+        });
+        Object.entries(turnFlatUpk).forEach(([res, val]) => {
+            upkeep[res] = (upkeep[res] || 0) + val;
+        });
+
+        // Pass 2: apply all % multipliers (additive stacking, single multiply)
+        Object.entries(turnPctProd).forEach(([res, totalPct]) => {
+            gross[res] = (gross[res] || 0) * (1 + totalPct / 100);
+        });
+        Object.entries(turnPctUpk).forEach(([res, totalPct]) => {
+            upkeep[res] = (upkeep[res] || 0) * (1 + totalPct / 100);
         });
 
         let sortedResources = Array.from(new Set([...Object.keys(gross), ...Object.keys(upkeep)])).sort();

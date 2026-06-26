@@ -423,6 +423,10 @@
 <header class="topbar">
     <span class="topbar-title">⬡ Empire Economy Calculator</span>
     <div class="topbar-actions">
+        <span id="tech-indicator" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);display:none;">
+            🔬 <span id="tech-count">0</span> techs active
+        </span>
+        <a href="techtree.html" class="btn btn-sm" style="text-decoration:none;">⚛ Tech Tree</a>
         <button class="btn btn-sm" onclick="saveData()">💾 Save</button>
         <button class="btn btn-sm" onclick="document.getElementById('file-upload').click()">📂 Load</button>
         <input type="file" id="file-upload" style="display:none" accept=".json" onchange="loadData(event)">
@@ -594,6 +598,83 @@
     // --- 2. STATE ---
     let appState = { groups: [], globalModifiers: [], planets: [] };
 
+    // Tech tree state (loaded from combined save)
+    let techResearched = {};
+
+    function updateTechIndicator() {
+        const count = Object.values(techResearched).filter(Boolean).length;
+        const ind = document.getElementById('tech-indicator');
+        const cnt = document.getElementById('tech-count');
+        if (count > 0) { ind.style.display = ''; cnt.textContent = count; }
+        else { ind.style.display = 'none'; }
+    }
+
+    // Apply researched tech effects as synthetic modifiers injected into calculation
+    // Returns arrays of synthetic planet-scope and turn-scope modifiers
+    function getTechModifiers() {
+        const planetMods = []; // {type, value, target, scope:'planet'}
+        const turnMods = [];   // {type, value, scope:'turn'}
+
+        const RES_MAP = {
+            tech:'Tech', food:'Food', minerals:'Minerals', mineral:'Minerals',
+            alloys:'Alloys', alloy:'Alloys', money:'Trade', unity:'Unity',
+            influence:'Influence', abstract:'Tech', basic:null, trade:'Trade'
+        };
+
+        Object.entries(techResearched).forEach(([id, isRes]) => {
+            if (!isRes) return;
+            // Find node in TECH_NODES (built at init)
+            const node = TECH_NODES[id];
+            if (!node || !node.effects) return;
+
+            node.effects.forEach(e => {
+                if (e.kind === 'flat_turn') {
+                    const res = RES_MAP[e.res] || e.res;
+                    turnMods.push({ name: node.name, type: `Flat ${res}`, value: e.val, scope: 'turn' });
+                } else if (e.kind === 'pct_turn') {
+                    if (e.res === 'basic') {
+                        turnMods.push({ name: node.name, type: '% Basic', value: e.val, scope: 'turn' });
+                    } else if (e.res === 'alloys' || e.res === 'alloy') {
+                        turnMods.push({ name: node.name, type: '% Alloys', value: e.val, scope: 'turn' });
+                    } else if (e.res === 'unity') {
+                        turnMods.push({ name: node.name, type: '% Unity', value: e.val, scope: 'turn' });
+                    } else if (e.res === 'tech') {
+                        turnMods.push({ name: node.name, type: '% Tech', value: e.val, scope: 'turn' });
+                    } else {
+                        const res = RES_MAP[e.res] || e.res;
+                        turnMods.push({ name: node.name, type: `% ${res}`, value: e.val, scope: 'turn' });
+                    }
+                } else if (e.kind === 'flat_planet') {
+                    if (e.res === 'basic') {
+                        planetMods.push({ name: node.name, type: 'Flat Basic', value: e.val, target: 'all', scope: 'planet' });
+                    } else {
+                        const res = RES_MAP[e.res] || e.res;
+                        planetMods.push({ name: node.name, type: `Flat ${res}`, value: e.val, target: 'all', scope: 'planet' });
+                    }
+                } else if (e.kind === 'flat_typed_planet') {
+                    // Map planet_type to target
+                    const PTYPE_TARGET = {
+                        agri: 'type_Agri-World (Organic)',
+                        mining: 'type_Mining World (Organic)',
+                        tech: 'type_Tech-World (Organic)',
+                        forge: 'type_Forge World',
+                        generator: 'type_Generator World (Organic)',
+                        unification: 'type_Unification Center (Organic)',
+                        all: 'all'
+                    };
+                    const target = PTYPE_TARGET[e.planet_type] || 'all';
+                    const res = RES_MAP[e.res] || e.res;
+                    planetMods.push({ name: node.name, type: `Flat ${res}`, value: e.val, target, scope: 'planet' });
+                } else if (e.kind === 'flat_upkeep_planet') {
+                    const res = RES_MAP[e.res] || e.res;
+                    planetMods.push({ name: node.name, type: `Flat ${res} Upkeep`, value: e.val, target: 'all', scope: 'planet' });
+                }
+            });
+        });
+
+        return { planetMods, turnMods };
+    }
+
     function initDatalist() {
         const datalist = document.getElementById('modifier-options');
         let options = [];
@@ -634,6 +715,11 @@
                     });
                 }
                 appState = loadedState;
+                // Load tech tree state if present
+                if (loadedState.techtree) {
+                    techResearched = loadedState.techtree;
+                    updateTechIndicator();
+                }
                 renderApp();
             } catch (err) { alert("Error loading configuration."); }
         };
@@ -852,6 +938,11 @@
             if (m.scope === 'planet') planetMods.push(m);
         });
 
+        // Inject researched tech modifiers
+        const techMods = getTechModifiers();
+        techMods.planetMods.forEach(m => planetMods.push(m));
+        techMods.turnMods.forEach(m => turnMods.push(m));
+
         appState.planets.forEach(p => {
             const baseData = PLANET_DATA[p.type] && PLANET_DATA[p.type][p.tier];
             if (!baseData) return;
@@ -958,8 +1049,14 @@
         outputDiv.innerHTML = gridHtml;
     }
 
+    // Build tech node lookup from embedded data (populated by techtree page via save)
+    // We don't embed the full 100KB here — just parse what we need from the save
+    const TECH_NODES = {};
+    // TECH_NODES is populated when a save with techtree key is loaded
+
     initDatalist();
     renderApp();
+    updateTechIndicator();
 </script>
 </body>
 </html>

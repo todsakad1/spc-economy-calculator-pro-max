@@ -380,6 +380,8 @@ function toggleTech(id, el) {
   researched[id] = !researched[id];
   el.classList.toggle('researched', researched[id]);
   updateStats();
+  // Live sync to economy calculator via localStorage
+  try { localStorage.setItem('spc_techtree', JSON.stringify(researched)); } catch(e) {}
 }
 
 // ── TOOLTIP ───────────────────────────────────────────────────────────────────
@@ -452,7 +454,14 @@ function filterSearch(q) {
 
 // ── SAVE / LOAD ───────────────────────────────────────────────────────────────
 function saveResearched() {
-  const data = JSON.stringify({techtree: researched}, null, 2);
+  // Merge with any existing economy save data in localStorage
+  let combined = {techtree: researched};
+  try {
+    const econData = localStorage.getItem('spc_economy');
+    if (econData) Object.assign(combined, JSON.parse(econData));
+  } catch(e) {}
+  combined.techtree = researched; // ensure tech is current
+  const data = JSON.stringify(combined, null, 2);
   const a = document.createElement('a');
   a.href = 'data:text/json;charset=utf-8,' + encodeURIComponent(data);
   a.download = 'empire_save.json';
@@ -468,7 +477,7 @@ function loadResearched(event) {
       const loaded = JSON.parse(e.target.result);
       if (loaded.techtree) {
         researched = loaded.techtree;
-        // Update all nodes
+        try { localStorage.setItem('spc_techtree', JSON.stringify(researched)); } catch(ex) {}
         document.querySelectorAll('.tech-node').forEach(el => {
           const id = el.dataset.id;
           el.classList.toggle('researched', !!researched[id]);
@@ -485,6 +494,12 @@ function loadResearched(event) {
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
+// Load from localStorage on startup (live sync with economy calculator)
+try {
+  const stored = localStorage.getItem('spc_techtree');
+  if (stored) researched = JSON.parse(stored);
+} catch(e) {}
+
 renderAll();
 updateStats();
 </script>
